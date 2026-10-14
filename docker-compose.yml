@@ -29,5 +29,12 @@ services:
         condition: service_healthy
     command: up
 
+  migrate-test:
+    extends:
+      service: migrate
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_TEST_DB:-lamplighter_test}?sslmode=disable
+      DBMATE_NO_DUMP_SCHEMA: "true"
+
 volumes:
   pgdata:

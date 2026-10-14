@@ -6,3 +6,5 @@ docs/
 node_modules/
 dist/
 .DS_Store
+/API.md
+/api/coverage/

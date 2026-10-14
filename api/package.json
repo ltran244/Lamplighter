@@ -2,19 +2,37 @@
   "name": "api",
   "version": "1.0.0",
   "scripts": {
-    "dev": "tsx watch src/index.ts",
+    "dev": "tsx watch --env-file-if-exists=../.env src/index.ts",
     "build": "tsc",
-    "start": "node dist/index.js"
+    "start": "node --env-file-if-exists=../.env dist/index.js",
+    "test": "npm run migrate:test && vitest run",
+    "test:coverage": "npm run migrate:test && vitest run --coverage",
+    "db:up": "docker compose --project-directory .. up -d --wait postgres",
+    "db:down": "docker compose --project-directory .. down",
+    "db:shell": "docker compose --project-directory .. exec postgres sh -c 'exec psql -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\"'",
+    "db:check-test": "node --env-file-if-exists=../.env -e \"const testDb = process.env.POSTGRES_TEST_DB ?? 'lamplighter_test'; if (!process.env.POSTGRES_DB || !testDb || testDb === process.env.POSTGRES_DB) throw new Error('POSTGRES_TEST_DB must be different from POSTGRES_DB');\"",
+    "migrate": "npm run db:check-test && npm run db:up && docker compose --project-directory .. run --rm migrate up && docker compose --project-directory .. run --rm migrate-test up",
+    "migrate:test": "npm run db:check-test && npm run db:up && docker compose --project-directory .. run --rm migrate-test up",
+    "migrate:new": "docker compose --project-directory .. run --rm migrate new",
+    "migrate:down": "npm run db:check-test && npm run db:up && docker compose --project-directory .. run --rm migrate rollback && docker compose --project-directory .. run --rm migrate-test rollback",
+    "migrate:status": "docker compose --project-directory .. run --rm migrate status && docker compose --project-directory .. run --rm migrate-test status",
+    "format": "prettier --write src test",
+    "format:check": "prettier --check src test"
   },
   "type": "module",
   "dependencies": {
+    "@fastify/cookie": "^11.1.2",
+    "arctic": "^3.7.0",
     "fastify": "^5.12.5",
     "postgres": "^3.4.9"
   },
   "devDependencies": {
     "@types/node": "^24.19.0",
+    "@vitest/coverage-v8": "5.0.3",
+    "prettier": "3.9.9",
     "tsx": "^4.23.15",
-    "typescript": "^7.0.2"
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.3"
   },
   "private": true
 }

@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: help install dev dev-api dev-web build db-up db-down db-shell migrate migrate-new migrate-down migrate-status
+.PHONY: help install dev dev-api dev-web build test-api test-api-coverage db-up db-down db-shell check-test-db migrate migrate-test migrate-new migrate-down migrate-status
 
 help:
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -13,7 +13,7 @@ install:
 dev:
 	$(MAKE) -j2 dev-api dev-web
 
-dev-api: db-up
+dev-api:
 	npm --prefix api run dev
 
 dev-web:
@@ -21,26 +21,37 @@ dev-web:
 
 build:
 	npm --prefix api run build
-	NODE_ENV=production npm --prefix web run build
+	npm --prefix web run build
+
+test-api:
+	npm --prefix api run test
+
+test-api-coverage:
+	npm --prefix api run test:coverage
 
 db-up:
-	docker compose up -d --wait postgres
+	npm --prefix api run db:up
 
 db-down:
-	docker compose down
+	npm --prefix api run db:down
 
 db-shell:
-	docker compose exec postgres psql -U $(POSTGRES_USER) -d $(POSTGRES_DB)
+	npm --prefix api run db:shell
+
+check-test-db:
+	npm --prefix api run db:check-test
 
 migrate:
-	docker compose run --rm migrate up
+	npm --prefix api run migrate
+
+migrate-test:
+	npm --prefix api run migrate:test
 
 migrate-new:
-	@test -n "$(name)" || (echo 'usage: make migrate-new name=create_users' && exit 1)
-	docker compose run --rm migrate new $(name)
+	npm --prefix api run migrate:new -- $(name)
 
 migrate-down:
-	docker compose run --rm migrate rollback
+	npm --prefix api run migrate:down
 
 migrate-status:
-	docker compose run --rm migrate status
+	npm --prefix api run migrate:status
