@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: help install dev dev-api dev-web build test-api test-api-coverage db-up db-down db-shell check-test-db migrate migrate-test migrate-new migrate-down migrate-status
+.PHONY: help install dev dev-api dev-web dev-worker build build-worker test-api test-api-coverage db-up db-down db-shell check-test-db migrate migrate-test migrate-new migrate-down migrate-status
 
 help:
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -18,6 +18,12 @@ dev-api:
 
 dev-web:
 	npm --prefix web run dev
+
+dev-worker: ## Run the Go worker
+	go -C worker run .
+
+build-worker: ## Build the Go worker binary
+	go -C worker build -o bin/worker .
 
 build:
 	npm --prefix api run build

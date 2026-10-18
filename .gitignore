@@ -8,3 +8,4 @@ dist/
 .DS_Store
 /API.md
 /api/coverage/
+/worker/bin/

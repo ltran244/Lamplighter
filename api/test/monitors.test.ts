@@ -52,6 +52,8 @@ async function createTestMonitor(
 const missingId = "00000000-0000-4000-8000-000000000000";
 const monitorEndpoints = [
   { method: "GET", path: "" },
+  { method: "GET", path: "/checks" },
+  { method: "GET", path: "/incidents" },
   { method: "PATCH", path: "", payload: { name: "Updated service" } },
   { method: "POST", path: "/pause" },
   { method: "POST", path: "/resume" },
@@ -82,7 +84,11 @@ describe("GET /api/monitors", () => {
   test("GET /api/monitors returns 200", async () => {
     const session = await createUserSession();
     await createTestMonitor(session.cookies);
-    const response = await app.inject({ method: "GET", url: "/api/monitors", cookies: session.cookies });
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/monitors",
+      cookies: session.cookies,
+    });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toHaveLength(1);
   });
@@ -99,13 +105,65 @@ describe("POST /api/monitors", () => {
 describe("GET /api/monitors/:id", () => {
   test("returns 404 for missing monitor", async () => {
     const session = await createUserSession();
-    const response = await app.inject({ method: "GET", url: `/api/monitors/${missingId}`, cookies: session.cookies });
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/monitors/${missingId}`,
+      cookies: session.cookies,
+    });
     expect(response.statusCode).toBe(404);
   });
   test("returns 200 for existing monitor", async () => {
     const session = await createUserSession();
     const monitor = await createTestMonitor(session.cookies);
-    const response = await app.inject({ method: "GET", url: `/api/monitors/${monitor.id}`, cookies: session.cookies });
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/monitors/${monitor.id}`,
+      cookies: session.cookies,
+    });
+    expect(response.statusCode).toBe(200);
+  });
+});
+
+describe("GET /api/monitors/:id/checks", () => {
+  test("returns 404 for missing monitor", async () => {
+    const session = await createUserSession();
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/monitors/${missingId}/checks`,
+      cookies: session.cookies,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+  test("returns 200 for existing monitor", async () => {
+    const session = await createUserSession();
+    const monitor = await createTestMonitor(session.cookies);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/monitors/${monitor.id}/checks`,
+      cookies: session.cookies,
+    });
+    expect(response.statusCode).toBe(200);
+  });
+});
+
+describe("GET /api/monitors/:id/incidents", () => {
+  test("returns 404 for missing monitor", async () => {
+    const session = await createUserSession();
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/monitors/${missingId}/incidents`,
+      cookies: session.cookies,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+  test("returns 200 for existing monitor", async () => {
+    const session = await createUserSession();
+    const monitor = await createTestMonitor(session.cookies);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/monitors/${monitor.id}/incidents`,
+      cookies: session.cookies,
+    });
     expect(response.statusCode).toBe(200);
   });
 });
@@ -113,13 +171,23 @@ describe("GET /api/monitors/:id", () => {
 describe("PATCH /api/monitors/:id", () => {
   test("returns 404 for missing monitor", async () => {
     const session = await createUserSession();
-    const response = await app.inject({ method: "PATCH", url: `/api/monitors/${missingId}`, cookies: session.cookies, payload: { name: "Updated service" } });
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/monitors/${missingId}`,
+      cookies: session.cookies,
+      payload: { name: "Updated service" },
+    });
     expect(response.statusCode).toBe(404);
   });
   test("returns 200 for existing monitor", async () => {
     const session = await createUserSession();
     const monitor = await createTestMonitor(session.cookies);
-    const response = await app.inject({ method: "PATCH", url: `/api/monitors/${monitor.id}`, cookies: session.cookies, payload: { name: "Updated service" } });
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/monitors/${monitor.id}`,
+      cookies: session.cookies,
+      payload: { name: "Updated service" },
+    });
     expect(response.statusCode).toBe(200);
   });
 });
@@ -127,28 +195,43 @@ describe("PATCH /api/monitors/:id", () => {
 describe("POST /api/monitors/:id/pause", () => {
   test("returns 404 for missing monitor", async () => {
     const session = await createUserSession();
-    const response = await app.inject({ method: "POST", url: `/api/monitors/${missingId}/pause`, cookies: session.cookies });
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/monitors/${missingId}/pause`,
+      cookies: session.cookies,
+    });
     expect(response.statusCode).toBe(404);
   });
   test("returns 200 for pausing a monitor", async () => {
     const session = await createUserSession();
     const monitor = await createTestMonitor(session.cookies);
-    const response = await app.inject({ method: "POST", url: `/api/monitors/${monitor.id}/pause`, cookies: session.cookies });
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/monitors/${monitor.id}/pause`,
+      cookies: session.cookies,
+    });
     expect(response.statusCode).toBe(200);
   });
 });
 
-
 describe("POST /api/monitors/:id/resume", () => {
   test("returns 404 for missing monitor", async () => {
     const session = await createUserSession();
-    const response = await app.inject({ method: "POST", url: `/api/monitors/${missingId}/resume`, cookies: session.cookies });
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/monitors/${missingId}/resume`,
+      cookies: session.cookies,
+    });
     expect(response.statusCode).toBe(404);
   });
   test("returns 200 for resuming a monitor", async () => {
     const session = await createUserSession();
     const monitor = await createTestMonitor(session.cookies);
-    const response = await app.inject({ method: "POST", url: `/api/monitors/${monitor.id}/resume`, cookies: session.cookies });
+    const response = await app.inject({
+      method: "POST",
+      url: `/api/monitors/${monitor.id}/resume`,
+      cookies: session.cookies,
+    });
     expect(response.statusCode).toBe(200);
   });
 });
@@ -156,13 +239,21 @@ describe("POST /api/monitors/:id/resume", () => {
 describe("DELETE /api/monitors/:id", () => {
   test("returns 404 for missing monitor", async () => {
     const session = await createUserSession();
-    const response = await app.inject({ method: "DELETE", url: `/api/monitors/${missingId}`, cookies: session.cookies });
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/monitors/${missingId}`,
+      cookies: session.cookies,
+    });
     expect(response.statusCode).toBe(404);
   });
   test("returns 204 for existing monitor", async () => {
     const session = await createUserSession();
     const monitor = await createTestMonitor(session.cookies);
-    const response = await app.inject({ method: "DELETE", url: `/api/monitors/${monitor.id}`, cookies: session.cookies });
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/monitors/${monitor.id}`,
+      cookies: session.cookies,
+    });
     expect(response.statusCode).toBe(204);
   });
 });

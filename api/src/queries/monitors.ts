@@ -19,6 +19,31 @@ export type MonitorFilters = {
   order?: "asc" | "desc";
 };
 
+export type MonitorCheckFilters = {
+  from?: string;
+  to?: string;
+  limit?: number;
+};
+
+type MonitorCheck = {
+  id: string;
+  scheduledAt: Date;
+  startedAt: Date;
+  finishedAt: Date;
+  statusCode: number | null;
+  latencyMs: number;
+  ok: boolean;
+  error: string | null;
+};
+
+type MonitorIncident = {
+  id: string;
+  startedAt: Date;
+  resolvedAt: Date | null;
+  durationSeconds: number;
+  cause: string;
+};
+
 type Monitor = {
   id: string;
   userId: string;
@@ -29,13 +54,18 @@ type Monitor = {
   timeoutMs: number;
   expectedStatus: number;
   paused: boolean;
+  status: "unknown" | "up" | "down";
+  consecutiveFailures: number;
+  nextRunAt: Date;
   createdAt: Date;
 };
 
 const monitorColumns = db`
   id, user_id AS "userId", name, url, method,
   interval_seconds AS "intervalSeconds", timeout_ms AS "timeoutMs",
-  expected_status AS "expectedStatus", paused, created_at AS "createdAt"
+  expected_status AS "expectedStatus", paused, status,
+  consecutive_failures AS "consecutiveFailures", next_run_at AS "nextRunAt",
+  created_at AS "createdAt"
 `;
 
 export async function createMonitor(userId: string, input: CreateMonitorInput) {
@@ -101,10 +131,7 @@ export async function updateMonitor(
   return monitor;
 }
 
-export async function setMonitorPaused(
-  userId: string,
-  monitorId: string,
-) {
+export async function setMonitorPaused(userId: string, monitorId: string) {
   // TODO: Reset next_run_at on resume when worker scheduling is wired up.
   const [monitor] = await db<Monitor[]>`
     UPDATE monitors SET paused = true
@@ -114,10 +141,7 @@ export async function setMonitorPaused(
   return monitor;
 }
 
-export async function setMonitorResumed(
-  userId: string,
-  monitorId: string,
-) {
+export async function setMonitorResumed(userId: string, monitorId: string) {
   const [monitor] = await db<Monitor[]>`
     UPDATE monitors SET paused = false
     WHERE id = ${monitorId} AND user_id = ${userId}
@@ -133,4 +157,48 @@ export async function deleteMonitor(userId: string, monitorId: string) {
     RETURNING id
   `;
   return deleted.length > 0;
+}
+
+export async function getMonitorStats(userId: string, monitorId: string) {
+  return db`
+    SELECT *
+    FROM monitors
+    WHERE id = ${monitorId} AND user_id = ${userId}
+  `;
+}
+
+export async function getMonitorChecks(
+  userId: string,
+  monitorId: string,
+  filters: MonitorCheckFilters = {},
+) {
+  return db<MonitorCheck[]>`
+    SELECT c.id, c.scheduled_at AS "scheduledAt", c.actual_start AS "startedAt",
+      c.finished_at AS "finishedAt", c.status_code AS "statusCode",
+      c.latency_ms AS "latencyMs", c.ok, c.error
+    FROM check_runs c
+    JOIN monitors m ON m.id = c.monitor_id
+    WHERE c.monitor_id = ${monitorId} AND m.user_id = ${userId}
+      AND c.scheduled_at >= COALESCE(${filters.from ?? null}::timestamptz, c.scheduled_at)
+      AND c.scheduled_at <= COALESCE(${filters.to ?? null}::timestamptz, c.scheduled_at)
+    ORDER BY c.scheduled_at DESC, c.id DESC
+    LIMIT ${filters.limit ?? 100}
+  `;
+}
+
+export async function getMonitorIncidents(
+  userId: string,
+  monitorId: string,
+  limit = 100,
+) {
+  return db<MonitorIncident[]>`
+    SELECT i.id, i.started_at AS "startedAt", i.resolved_at AS "resolvedAt",
+      floor(extract(epoch FROM (COALESCE(i.resolved_at, now()) - i.started_at)))::double precision AS "durationSeconds",
+      i.cause
+    FROM incidents i
+    JOIN monitors m ON m.id = i.monitor_id
+    WHERE i.monitor_id = ${monitorId} AND m.user_id = ${userId}
+    ORDER BY i.started_at DESC, i.id DESC
+    LIMIT ${limit}
+  `;
 }

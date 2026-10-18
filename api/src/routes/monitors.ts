@@ -4,11 +4,14 @@ import {
   createMonitor,
   deleteMonitor,
   getMonitor,
+  getMonitorChecks,
+  getMonitorIncidents,
   getMonitors,
   setMonitorPaused,
   setMonitorResumed,
   updateMonitor,
   type CreateMonitorInput,
+  type MonitorCheckFilters,
   type MonitorFilters,
   type UpdateMonitorInput,
 } from "../queries/monitors.js";
@@ -21,6 +24,13 @@ const monitorParams = {
   type: "object",
   required: ["id"],
   properties: { id: { type: "string", format: "uuid" } },
+};
+
+const historyLimit = {
+  type: "integer",
+  minimum: 1,
+  maximum: 1000,
+  default: 100,
 };
 
 // No defaults for PATCH
@@ -131,6 +141,83 @@ export async function monitorRoutes(app: FastifyInstance) {
     },
   );
 
+  app.get<{ Params: MonitorParams; Querystring: MonitorCheckFilters }>(
+    "/api/monitors/:id/checks",
+    {
+      schema: {
+        params: monitorParams,
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            from: { type: "string", format: "date-time" },
+            to: { type: "string", format: "date-time" },
+            limit: historyLimit,
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const monitor = await getMonitor(req.user!.id, req.params.id);
+      if (!monitor) {
+        return reply.code(404).send({
+          error: "monitor_not_found",
+          message: "Monitor not found.",
+        });
+      }
+      if (
+        req.query.from &&
+        req.query.to &&
+        Date.parse(req.query.from) > Date.parse(req.query.to)
+      ) {
+        return reply.code(400).send({
+          error: "invalid_date_range",
+          message:
+            "The from timestamp must be before or equal to the to timestamp.",
+        });
+      }
+      const checks = await getMonitorChecks(req.user!.id, req.params.id, req.query);
+      if (!checks) {
+        return reply.code(404).send({
+          error: "checks_not_found",
+          message: "No checks found for this monitor.",
+        });
+      }
+      return checks;
+    },
+  );
+
+  app.get<{ Params: MonitorParams; Querystring: { limit?: number } }>(
+    "/api/monitors/:id/incidents",
+    {
+      schema: {
+        params: monitorParams,
+        querystring: {
+          type: "object",
+          additionalProperties: false,
+          properties: { limit: historyLimit },
+        },
+      },
+    },
+    async (req, reply) => {
+      const monitor = await getMonitor(req.user!.id, req.params.id);
+      if (!monitor) {
+        return reply.code(404).send({
+          error: "monitor_not_found",
+          message: "Monitor not found.",
+        });
+      }
+      const incidents = await getMonitorIncidents(req.user!.id, req.params.id, req.query.limit);
+      if (!incidents) {
+        return reply.code(404).send({
+          error: "incidents_not_found",
+          message: "No incidents found for this monitor.",
+        });
+      }
+      return incidents  ;
+    },
+  );
+
   app.patch<{ Params: MonitorParams; Body: UpdateMonitorInput }>(
     "/api/monitors/:id",
     {
@@ -211,7 +298,6 @@ export async function monitorRoutes(app: FastifyInstance) {
     },
   );
 
-  // TODO: Implement /:id/checks and /:id/stats using check_runs; the worker writes results.
-  // TODO: Implement GET /api/monitors/:id/incidents using incidents.
+  // TODO: Implement /:id/stats using check_runs.
   // TODO: Implement /:id/headers GET/PUT with encryption and secret masking.
 }
