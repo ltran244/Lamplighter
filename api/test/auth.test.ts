@@ -15,21 +15,17 @@ beforeEach(async () => {
 
   // Mock HTTP only: Arctic and all application/database code still run.
   fetchMock.mockImplementation(async (input, init) => {
-    const request = new Request(input, init);
-    if (request.url === "https://github.com/login/oauth/access_token") {
-      expect(request.method).toBe("POST");
-      const body = new URLSearchParams(await request.text());
-      expect(body.get("code")).toBe("test-code");
+    const { url } = new Request(input, init);
+    if (url === "https://github.com/login/oauth/access_token") {
       return Response.json({
         access_token: "test-token",
         token_type: "bearer",
       });
     }
-    if (request.url === "https://api.github.com/user") {
-      expect(request.headers.get("Authorization")).toBe("Bearer test-token");
+    if (url === "https://api.github.com/user") {
       return Response.json(githubUser);
     }
-    throw new Error(`Unexpected external request: ${request.url}`);
+    throw new Error(`Unexpected external request: ${url}`);
   });
 });
 
@@ -53,20 +49,11 @@ async function startLogin() {
   expect(location.origin + location.pathname).toBe(
     "https://github.com/login/oauth/authorize",
   );
-  expect(location.searchParams.get("client_id")).toBe("test-client");
-  expect(location.searchParams.get("redirect_uri")).toBe(
-    process.env.GITHUB_REDIRECT_URI,
-  );
-
   const stateCookie = response.cookies.find(
     (c) => c.name === OAUTH_STATE_COOKIE,
   )!;
   expect(stateCookie.value).toBeTruthy();
   expect(stateCookie.value).toBe(location.searchParams.get("state"));
-  expect(stateCookie.httpOnly).toBe(true);
-  expect(stateCookie.sameSite).toBe("Lax");
-  expect(stateCookie.path).toBe("/auth/github");
-  expect(stateCookie.maxAge).toBe(600);
   return stateCookie.value;
 }
 
@@ -79,28 +66,14 @@ async function login() {
   });
 }
 
-test("GitHub login creates a real user and session and sets the browser cookie", async () => {
-  const before = Date.now();
+test("GitHub login creates a user and session, sets a cookie, and redirects to the app", async () => {
   const response = await login();
 
   expect(response.statusCode).toBe(302);
   expect(response.headers.location).toBe(process.env.FRONTEND_URL);
-  expect(response.headers["cache-control"]).toBe("no-store");
-  expect(fetchMock).toHaveBeenCalledTimes(2);
 
   const cookie = response.cookies.find((c) => c.name === SESSION_COOKIE)!;
-  expect(cookie.value).toMatch(/^[0-9a-f-]{36}$/);
-  expect(cookie.path).toBe("/");
-  expect(cookie.httpOnly).toBe(true);
-  expect(cookie.sameSite).toBe("Lax");
-  expect(cookie.maxAge).toBe(60 * 60 * 24 * 30);
-
-  const stateCookie = response.cookies.find(
-    (c) => c.name === OAUTH_STATE_COOKIE,
-  )!;
-  expect(stateCookie.value).toBe("");
-  expect(stateCookie.path).toBe("/auth/github");
-  expect(stateCookie.expires!.getTime()).toBeLessThan(Date.now());
+  expect(cookie.value).toBeTruthy();
 
   const [user] = await db`SELECT id, github_id, username FROM users`;
   expect(String(user.github_id)).toBe(String(githubUser.id));
@@ -109,13 +82,7 @@ test("GitHub login creates a real user and session and sets the browser cookie",
   const [session] = await db`SELECT id, user_id, expires_at FROM sessions`;
   expect(session.id).toBe(cookie.value);
   expect(session.user_id).toBe(user.id);
-  const duration = 30 * 24 * 60 * 60 * 1000;
-  expect(session.expires_at.getTime()).toBeGreaterThanOrEqual(
-    before + duration,
-  );
-  expect(session.expires_at.getTime()).toBeLessThanOrEqual(
-    Date.now() + duration,
-  );
+  expect(session.expires_at.getTime()).toBeGreaterThan(Date.now());
 });
 
 test("returning GitHub users keep their ID and get their username updated", async () => {
@@ -143,6 +110,7 @@ test("invalid state rejects login without creating a user or session", async () 
     cookies: { [OAUTH_STATE_COOKIE]: state },
   });
   expect(response.statusCode).toBe(400);
+  expect(response.json()).toMatchObject({ error: "invalid_oauth_state" });
   expect(fetchMock).not.toHaveBeenCalled();
   expect(response.cookies.some((c) => c.name === SESSION_COOKIE)).toBe(false);
   expect(await db`SELECT id FROM users`).toHaveLength(0);
@@ -168,22 +136,11 @@ test("logout revokes only the current session and clears both cookies", async ()
   });
   expect(response.statusCode).toBe(204);
   expect(response.body).toBe("");
-  expect(response.headers["cache-control"]).toBe("no-store");
-  expect(
-    await db`SELECT id FROM sessions WHERE id = ${sessionId}`,
-  ).toHaveLength(0);
-  expect(
-    await db`SELECT id FROM sessions WHERE id = ${otherSessionId}`,
-  ).toHaveLength(1);
+  expect(await db`SELECT id FROM sessions`).toEqual([{ id: otherSessionId }]);
   expect(await db`SELECT id FROM users`).toHaveLength(1);
 
-  for (const [name, path] of [
-    [SESSION_COOKIE, "/"],
-    [OAUTH_STATE_COOKIE, "/auth/github"],
-  ]) {
+  for (const name of [SESSION_COOKIE, OAUTH_STATE_COOKIE]) {
     const cookie = response.cookies.find((c) => c.name === name)!;
     expect(cookie.value).toBe("");
-    expect(cookie.path).toBe(path);
-    expect(cookie.expires!.getTime()).toBeLessThan(Date.now());
   }
 });

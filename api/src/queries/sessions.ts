@@ -1,6 +1,6 @@
 import { db } from "../db.js";
 
-type SessionUser = {
+export type SessionUser = {
   id: string;
   username: string;
 };
@@ -12,7 +12,7 @@ export async function createSession(userId: string, expiresAt: Date) {
           RETURNING id
         `;
   return session;
-}  
+}
 export async function getSessionUser(sessionId: string) {
   const [user] = await db<SessionUser[]>`
     SELECT users.id, users.username

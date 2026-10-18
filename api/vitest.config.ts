@@ -22,6 +22,7 @@ export default defineConfig({
       include: ["src/**/*.ts"],
       reporter: ["text", "html"],
       reportsDirectory: "./coverage",
+      exclude: ["src/index.ts"],
     },
     env: {
       NODE_ENV: "test",
@@ -31,5 +32,6 @@ export default defineConfig({
       GITHUB_REDIRECT_URI: "http://localhost:3000/auth/github/callback",
       FRONTEND_URL: "http://localhost:5173",
     },
+
   },
 });

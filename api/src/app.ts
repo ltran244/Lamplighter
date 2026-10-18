@@ -2,11 +2,14 @@ import Fastify from "fastify";
 import cookie from "@fastify/cookie";
 import { db } from "./db.js";
 import { authRoutes } from "./routes/auth.js";
+import { monitorRoutes } from "./routes/monitors.js";
 export function buildApp() {
   const app = Fastify({ logger: true });
 
+  app.decorateRequest("user", null);
   app.register(cookie);
   app.register(authRoutes);
+  app.register(monitorRoutes);
 
   app.get("/health", async (request, reply) => {
     try {
