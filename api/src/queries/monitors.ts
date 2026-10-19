@@ -44,6 +44,13 @@ type MonitorIncident = {
   cause: string;
 };
 
+type MonitorStats = {
+  uptime24h: number | null;
+  uptime7d: number | null;
+  avgLatencyMs24h: number | null;
+  checks24h: number;
+};
+
 type Monitor = {
   id: string;
   userId: string;
@@ -160,11 +167,27 @@ export async function deleteMonitor(userId: string, monitorId: string) {
 }
 
 export async function getMonitorStats(userId: string, monitorId: string) {
-  return db`
-    SELECT *
-    FROM monitors
-    WHERE id = ${monitorId} AND user_id = ${userId}
+  // return monitor stats for the last 24 hours and 7 days
+  const [stats] = await db<MonitorStats[]>`
+    SELECT
+      (100 * avg(c.ok::integer) FILTER (
+        WHERE c.scheduled_at >= now() - interval '24 hours'
+      ))::double precision AS "uptime24h",
+      (100 * avg(c.ok::integer))::double precision AS "uptime7d",
+      (avg(c.latency_ms) FILTER (
+        WHERE c.scheduled_at >= now() - interval '24 hours'
+      ))::double precision AS "avgLatencyMs24h",
+      (count(c.id) FILTER (
+        WHERE c.scheduled_at >= now() - interval '24 hours'
+      ))::integer AS "checks24h"
+    FROM monitors m
+    LEFT JOIN check_runs c ON c.monitor_id = m.id
+      AND c.scheduled_at >= now() - interval '7 days'
+      AND c.scheduled_at <= now()
+    WHERE m.id = ${monitorId} AND m.user_id = ${userId}
+    GROUP BY m.id
   `;
+  return stats;
 }
 
 export async function getMonitorChecks(

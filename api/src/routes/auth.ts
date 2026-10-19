@@ -136,12 +136,10 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.code(204).send();
     } catch (err) {
       req.log.error({ err }, "Logout failed");
-      return reply
-        .code(500)
-        .send({
-          error: "logout_failed",
-          message: "Unable to logout. Please try again later.",
-        });
+      return reply.code(500).send({
+        error: "logout_failed",
+        message: "Unable to logout. Please try again later.",
+      });
     }
   });
 }

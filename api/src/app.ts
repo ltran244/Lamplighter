@@ -3,6 +3,7 @@ import cookie from "@fastify/cookie";
 import { db } from "./db.js";
 import { authRoutes } from "./routes/auth.js";
 import { monitorRoutes } from "./routes/monitors.js";
+import { alertChannelRoutes } from "./routes/alert-channels.js";
 export function buildApp() {
   const app = Fastify({ logger: true });
 
@@ -10,6 +11,7 @@ export function buildApp() {
   app.register(cookie);
   app.register(authRoutes);
   app.register(monitorRoutes);
+  app.register(alertChannelRoutes);
 
   app.get("/health", async (request, reply) => {
     try {

@@ -7,6 +7,7 @@ import {
   getMonitorChecks,
   getMonitorIncidents,
   getMonitors,
+  getMonitorStats,
   setMonitorPaused,
   setMonitorResumed,
   updateMonitor,
@@ -141,6 +142,21 @@ export async function monitorRoutes(app: FastifyInstance) {
     },
   );
 
+  app.get<{ Params: MonitorParams }>(
+    "/api/monitors/:id/stats",
+    { schema: { params: monitorParams } },
+    async (req, reply) => {
+      const stats = await getMonitorStats(req.user!.id, req.params.id);
+      if (!stats) {
+        return reply.code(404).send({
+          error: "monitor_not_found",
+          message: "Monitor not found.",
+        });
+      }
+      return stats;
+    },
+  );
+
   app.get<{ Params: MonitorParams; Querystring: MonitorCheckFilters }>(
     "/api/monitors/:id/checks",
     {
@@ -176,13 +192,11 @@ export async function monitorRoutes(app: FastifyInstance) {
             "The from timestamp must be before or equal to the to timestamp.",
         });
       }
-      const checks = await getMonitorChecks(req.user!.id, req.params.id, req.query);
-      if (!checks) {
-        return reply.code(404).send({
-          error: "checks_not_found",
-          message: "No checks found for this monitor.",
-        });
-      }
+      const checks = await getMonitorChecks(
+        req.user!.id,
+        req.params.id,
+        req.query,
+      );
       return checks;
     },
   );
@@ -207,14 +221,12 @@ export async function monitorRoutes(app: FastifyInstance) {
           message: "Monitor not found.",
         });
       }
-      const incidents = await getMonitorIncidents(req.user!.id, req.params.id, req.query.limit);
-      if (!incidents) {
-        return reply.code(404).send({
-          error: "incidents_not_found",
-          message: "No incidents found for this monitor.",
-        });
-      }
-      return incidents  ;
+      const incidents = await getMonitorIncidents(
+        req.user!.id,
+        req.params.id,
+        req.query.limit,
+      );
+      return incidents;
     },
   );
 
@@ -298,6 +310,5 @@ export async function monitorRoutes(app: FastifyInstance) {
     },
   );
 
-  // TODO: Implement /:id/stats using check_runs.
   // TODO: Implement /:id/headers GET/PUT with encryption and secret masking.
 }

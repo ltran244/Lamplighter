@@ -1,10 +1,8 @@
 import { afterAll, beforeEach, describe, expect, test } from "vitest";
 import { buildApp } from "../src/app.js";
 import { db } from "../src/db.js";
-import { upsertGithubUser } from "../src/queries/auth.js";
 import type { CreateMonitorInput } from "../src/queries/monitors.js";
-import { createSession } from "../src/queries/sessions.js";
-import { SESSION_COOKIE } from "../src/session.js";
+import { createUserSession } from "./helpers.js";
 
 const app = buildApp();
 
@@ -19,17 +17,6 @@ afterAll(async () => {
     await app.close();
   }
 });
-
-async function createUserSession(githubId = 123) {
-  const user = await upsertGithubUser(githubId, `test-user-${githubId}`);
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
-  const session = await createSession(user.id, expiresAt);
-
-  return {
-    userId: user.id,
-    cookies: { [SESSION_COOKIE]: session.id },
-  };
-}
 
 async function createTestMonitor(
   cookies: Record<string, string>,
@@ -144,6 +131,16 @@ describe("GET /api/monitors/:id/checks", () => {
     });
     expect(response.statusCode).toBe(200);
   });
+  test("returns 400 for invalid date range", async () => {
+    const session = await createUserSession();
+    const monitor = await createTestMonitor(session.cookies);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/monitors/${monitor.id}/checks?from=2024-06-01T00:00:00Z&to=2024-05-01T00:00:00Z`,
+      cookies: session.cookies,
+    });
+    expect(response.statusCode).toBe(400);
+  });
 });
 
 describe("GET /api/monitors/:id/incidents", () => {
@@ -255,5 +252,27 @@ describe("DELETE /api/monitors/:id", () => {
       cookies: session.cookies,
     });
     expect(response.statusCode).toBe(204);
+  });
+});
+
+describe("GET /api/monitors/:id/stats", () => {
+  test("returns 404 for missing monitor", async () => {
+    const session = await createUserSession();
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/monitors/${missingId}/stats`,
+      cookies: session.cookies,
+    });
+    expect(response.statusCode).toBe(404);
+  });
+  test("returns 200 for existing monitor", async () => {
+    const session = await createUserSession();
+    const monitor = await createTestMonitor(session.cookies);
+    const response = await app.inject({
+      method: "GET",
+      url: `/api/monitors/${monitor.id}/stats`,
+      cookies: session.cookies,
+    });
+    expect(response.statusCode).toBe(200);
   });
 });
