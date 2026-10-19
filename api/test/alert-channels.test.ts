@@ -71,6 +71,17 @@ describe("POST /api/alert-channels", () => {
     const channel = await createTestChannel(session.cookies);
     expect(channel.id).toBeDefined();
   });
+
+  test("returns 400 for an invalid email", async () => {
+    const session = await createUserSession();
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/alert-channels",
+      cookies: session.cookies,
+      payload: { target: "not-an-email" },
+    });
+    expect(response.statusCode).toBe(400);
+  });
 });
 
 describe("GET /api/alert-channels/:id", () => {
@@ -118,6 +129,24 @@ describe("PATCH /api/alert-channels/:id", () => {
       payload: { target: "updated@example.com" },
     });
     expect(response.statusCode).toBe(200);
+    const stored = await app.inject({
+      method: "GET",
+      url: `/api/alert-channels/${channel.id}`,
+      cookies: session.cookies,
+    });
+    expect(stored.json().target).toBe("updated@example.com");
+  });
+
+  test("returns 400 for an invalid email", async () => {
+    const session = await createUserSession();
+    const channel = await createTestChannel(session.cookies);
+    const response = await app.inject({
+      method: "PATCH",
+      url: `/api/alert-channels/${channel.id}`,
+      cookies: session.cookies,
+      payload: { target: "not-an-email" },
+    });
+    expect(response.statusCode).toBe(400);
   });
 });
 
@@ -141,5 +170,47 @@ describe("DELETE /api/alert-channels/:id", () => {
       cookies: session.cookies,
     });
     expect(response.statusCode).toBe(204);
+    const deleted = await app.inject({
+      method: "GET",
+      url: `/api/alert-channels/${channel.id}`,
+      cookies: session.cookies,
+    });
+    expect(deleted.statusCode).toBe(404);
+  });
+});
+
+describe("Alert channel ownership", () => {
+  test.each(["GET", "PATCH", "DELETE"] as const)(
+    "%s returns 404 for another user's channel",
+    async (method) => {
+      const owner = await createUserSession();
+      const other = await createUserSession(456);
+      const channel = await createTestChannel(owner.cookies);
+      const response = await app.inject({
+        method,
+        url: `/api/alert-channels/${channel.id}`,
+        cookies: other.cookies,
+        ...(method === "PATCH"
+          ? { payload: { target: "updated@example.com" } }
+          : {}),
+      });
+      expect(response.statusCode).toBe(404);
+      const [stored] =
+        await db`SELECT target FROM alert_channels WHERE id = ${channel.id}`;
+      expect(stored.target).toBe("alerts@example.com");
+    },
+  );
+
+  test("does not list another user's channels", async () => {
+    const owner = await createUserSession();
+    const other = await createUserSession(456);
+    await createTestChannel(owner.cookies);
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/alert-channels",
+      cookies: other.cookies,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([]);
   });
 });

@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { generateState, OAuth2RequestError } from "arctic";
 import { config } from "../config.js";
 import { github } from "../github.js";
+import { requireAuth } from "../middleware/auth.js";
 import { upsertGithubUser } from "../queries/auth.js";
 import { createSession, deleteSession } from "../queries/sessions.js";
 import { parseSessionId, SESSION_COOKIE } from "../session.js";
@@ -142,4 +143,24 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
   });
+
+  app.get(
+    "/api/me",
+    {
+      onRequest: [
+        async (_req, reply) => {
+          reply.header("Cache-Control", "no-store");
+        },
+        requireAuth,
+      ],
+      errorHandler: (err, req, reply) => {
+        req.log.error({ err }, "Current user request failed");
+        return reply.code(500).send({
+          error: "internal_error",
+          message: "Unable to retrieve your account. Please try again later.",
+        });
+      },
+    },
+    async (req) => req.user,
+  );
 }

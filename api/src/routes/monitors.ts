@@ -1,6 +1,11 @@
 import type { FastifyError, FastifyInstance } from "fastify";
 import { requireAuth } from "../middleware/auth.js";
 import {
+  getMonitorHeaders,
+  replaceMonitorHeaders,
+  type MonitorHeaderInput,
+} from "../queries/monitor-headers.js";
+import {
   createMonitor,
   deleteMonitor,
   getMonitor,
@@ -310,5 +315,68 @@ export async function monitorRoutes(app: FastifyInstance) {
     },
   );
 
-  // TODO: Implement /:id/headers GET/PUT with encryption and secret masking.
+  app.get<{ Params: MonitorParams }>(
+    "/api/monitors/:id/headers",
+    { schema: { params: monitorParams } },
+    async (req, reply) => {
+      const monitor = await getMonitor(req.user!.id, req.params.id);
+      if (!monitor) {
+        return reply.code(404).send({
+          error: "monitor_not_found",
+          message: "Monitor not found.",
+        });
+      }
+      return getMonitorHeaders(req.user!.id, req.params.id);
+    },
+  );
+
+  app.put<{ Params: MonitorParams; Body: MonitorHeaderInput[] }>(
+    "/api/monitors/:id/headers",
+    {
+      schema: {
+        params: monitorParams,
+        body: {
+          type: "array",
+          items: {
+            type: "object",
+            required: ["name"],
+            additionalProperties: false,
+            properties: {
+              name: {
+                type: "string",
+                pattern: "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$",
+              },
+              value: {
+                type: "string",
+                pattern: "^[\\t\\x20-\\x7e\\x80-\\xff]*$",
+              },
+              isSecret: { type: "boolean", default: true },
+            },
+          },
+        },
+      },
+    },
+    async (req, reply) => {
+      const names = req.body.map((header) => header.name.toLowerCase());
+      if (new Set(names).size !== names.length) {
+        return reply.code(400).send({
+          error: "duplicate_header_name",
+          message: "Header names must be unique, ignoring case.",
+        });
+      }
+
+      const headers = await replaceMonitorHeaders(
+        req.user!.id,
+        req.params.id,
+        req.body,
+      );
+      if (!headers) {
+        return reply.code(404).send({
+          error: "monitor_not_found",
+          message: "Monitor not found.",
+        });
+      }
+      return headers;
+    },
+  );
 }

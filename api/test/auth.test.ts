@@ -1,12 +1,57 @@
-import { afterAll, afterEach, beforeEach, expect, test, vi } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  test,
+  vi,
+} from "vitest";
 import { buildApp } from "../src/app.js";
 import { db } from "../src/db.js";
 import { OAUTH_STATE_COOKIE } from "../src/routes/auth.js";
 import { SESSION_COOKIE } from "../src/session.js";
+import { createUserSession } from "./helpers.js";
 
 const app = buildApp();
 const githubUser = { id: 123, login: "test-user" };
 const fetchMock = vi.fn<typeof fetch>();
+
+describe("GET /api/me", () => {
+  test("returns 200 with user details", async () => {
+    const session = await createUserSession();
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/me",
+      cookies: session.cookies,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      id: session.userId,
+      username: "test-user-123",
+    });
+  });
+
+  test("returns 401 without authentication", async () => {
+    const response = await app.inject({ method: "GET", url: "/api/me" });
+    expect(response.statusCode).toBe(401);
+  });
+
+  test("returns 401 for an expired session", async () => {
+    const session = await createUserSession();
+    await db`
+      UPDATE sessions SET expires_at = now() - interval '1 hour'
+      WHERE id = ${session.cookies[SESSION_COOKIE]}
+    `;
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/me",
+      cookies: session.cookies,
+    });
+    expect(response.statusCode).toBe(401);
+  });
+});
 
 beforeEach(async () => {
   await db`DELETE FROM users`;

@@ -4,6 +4,7 @@ import { db } from "./db.js";
 import { authRoutes } from "./routes/auth.js";
 import { monitorRoutes } from "./routes/monitors.js";
 import { alertChannelRoutes } from "./routes/alert-channels.js";
+import { incidentRoutes } from "./routes/incidents.js";
 export function buildApp() {
   const app = Fastify({ logger: true });
 
@@ -12,6 +13,7 @@ export function buildApp() {
   app.register(authRoutes);
   app.register(monitorRoutes);
   app.register(alertChannelRoutes);
+  app.register(incidentRoutes);
 
   app.get("/health", async (request, reply) => {
     try {

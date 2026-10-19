@@ -139,7 +139,6 @@ export async function updateMonitor(
 }
 
 export async function setMonitorPaused(userId: string, monitorId: string) {
-  // TODO: Reset next_run_at on resume when worker scheduling is wired up.
   const [monitor] = await db<Monitor[]>`
     UPDATE monitors SET paused = true
     WHERE id = ${monitorId} AND user_id = ${userId}
@@ -150,7 +149,9 @@ export async function setMonitorPaused(userId: string, monitorId: string) {
 
 export async function setMonitorResumed(userId: string, monitorId: string) {
   const [monitor] = await db<Monitor[]>`
-    UPDATE monitors SET paused = false
+    UPDATE monitors
+    SET next_run_at = CASE WHEN paused THEN now() ELSE next_run_at END,
+      paused = false
     WHERE id = ${monitorId} AND user_id = ${userId}
     RETURNING ${monitorColumns}
   `;

@@ -1,4 +1,4 @@
-package main
+package worker
 
 import (
 	"context"
@@ -13,10 +13,11 @@ import (
 const failureThreshold = 3
 
 // A false result means the monitor was deleted or this claim is no longer valid.
-func saveResult(ctx context.Context, db *pgxpool.Pool, monitor *Monitor, result CheckResult, workerID string) (bool, error) {
+// The alert is "down" or "recovered" only after the transaction commits.
+func SaveResult(ctx context.Context, db *pgxpool.Pool, monitor *Monitor, result CheckResult, workerID string) (bool, string, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
-		return false, fmt.Errorf("begin result transaction: %w", err)
+		return false, "", fmt.Errorf("begin result transaction: %w", err)
 	}
 	defer tx.Rollback(ctx)
 
@@ -32,10 +33,10 @@ func saveResult(ctx context.Context, db *pgxpool.Pool, monitor *Monitor, result 
 		FOR UPDATE
 	`, monitor.ID, monitor.LeaseUntil).Scan(&previousStatus, &failures, &intervalSeconds, &now)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return false, nil
+		return false, "", nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("verify monitor lease: %w", err)
+		return false, "", fmt.Errorf("verify monitor lease: %w", err)
 	}
 
 	status := previousStatus
@@ -58,24 +59,27 @@ func saveResult(ctx context.Context, db *pgxpool.Pool, monitor *Monitor, result 
 	`, monitor.ID, monitor.ScheduledAt, result.StartedAt, result.FinishedAt,
 		result.StatusCode, result.LatencyMS, result.OK, result.Error, workerID)
 	if err != nil {
-		return false, fmt.Errorf("insert check result: %w", err)
+		return false, "", fmt.Errorf("insert check result: %w", err)
 	}
 	// Open an incident if the monitor just went down, or resolve if it came back up
+	alert := ""
 	if status == "down" && previousStatus != "down" {
+		alert = "down"
 		_, err = tx.Exec(ctx, `
 			INSERT INTO incidents (monitor_id, cause)
 			VALUES ($1, $2)
 		`, monitor.ID, result.Error)
 		if err != nil {
-			return false, fmt.Errorf("open incident: %w", err)
+			return false, "", fmt.Errorf("open incident: %w", err)
 		}
 	} else if status == "up" && previousStatus == "down" {
+		alert = "recovered"
 		_, err = tx.Exec(ctx, `
 			UPDATE incidents SET resolved_at = now()
 			WHERE monitor_id = $1 AND resolved_at IS NULL
 		`, monitor.ID)
 		if err != nil {
-			return false, fmt.Errorf("resolve incident: %w", err)
+			return false, "", fmt.Errorf("resolve incident: %w", err)
 		}
 	}
 	// Update the monitor schedule and clear the lease
@@ -85,19 +89,19 @@ func saveResult(ctx context.Context, db *pgxpool.Pool, monitor *Monitor, result 
 			next_run_at = $5, lease_until = NULL
 		WHERE id = $1 AND lease_until = $2
 	`, monitor.ID, monitor.LeaseUntil, status, failures,
-		nextRunAt(monitor.ScheduledAt, now, intervalSeconds))
+		NextRunAt(monitor.ScheduledAt, now, intervalSeconds))
 	if err != nil {
-		return false, fmt.Errorf("update monitor schedule: %w", err)
+		return false, "", fmt.Errorf("update monitor schedule: %w", err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return false, fmt.Errorf("commit check result: %w", err)
+		return false, "", fmt.Errorf("commit check result: %w", err)
 	}
-	return true, nil
+	return true, alert, nil
 }
 
 // Keep the original schedule and skip missed slots instead of replaying them.
-func nextRunAt(scheduledAt, now time.Time, intervalSeconds int) time.Time {
+func NextRunAt(scheduledAt, now time.Time, intervalSeconds int) time.Time {
 	interval := time.Duration(intervalSeconds) * time.Second
 	if now.Before(scheduledAt) {
 		return scheduledAt.Add(interval)

@@ -1,4 +1,4 @@
-package main
+package worker
 
 import (
 	"context"
@@ -6,22 +6,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"os/signal"
-	"syscall"
 	"time"
 )
 
-func main() {
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
-	if err := run(ctx); err != nil {
-		log.Printf("worker failed: %v", err)
-		os.Exit(1)
-	}
-}
-
-func run(ctx context.Context) error {
+func Run(ctx context.Context) error {
 	db, err := connectDB(ctx)
 	if err != nil {
 		return err
@@ -54,7 +42,7 @@ func run(ctx context.Context) error {
 			return nil
 		case <-ticker.C:
 			claimCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			monitor, err := claimMonitor(claimCtx, db)
+			monitor, err := ClaimMonitor(claimCtx, db)
 			cancel()
 			if err != nil {
 				if ctx.Err() != nil {
@@ -68,13 +56,13 @@ func run(ctx context.Context) error {
 			}
 
 			log.Printf("claimed monitor %s; lease expires at %s", monitor.ID, monitor.LeaseUntil.Format(time.RFC3339))
-			result := checkMonitor(ctx, client, monitor)
+			result := CheckMonitor(ctx, client, monitor)
 			if ctx.Err() != nil {
 				return nil
 			}
 
 			saveCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-			saved, err := saveResult(saveCtx, db, monitor, result, workerID)
+			saved, alert, err := SaveResult(saveCtx, db, monitor, result, workerID)
 			cancel()
 			if err != nil {
 				if ctx.Err() != nil {
@@ -92,6 +80,24 @@ func run(ctx context.Context) error {
 				log.Printf("monitor %s: status=%d latency_ms=%d ok=true", monitor.ID, *result.StatusCode, result.LatencyMS)
 			} else {
 				log.Printf("monitor %s: latency_ms=%d ok=false error=%q", monitor.ID, result.LatencyMS, result.Error)
+			}
+			// Send alert if needed
+			if alert != "" {
+				targetCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+				targets, err := getAlertTargets(targetCtx, db, monitor.ID)
+				cancel()
+				if err != nil {
+					log.Printf("get email targets for monitor %s: %v", monitor.ID, err)
+					continue
+				}
+				if len(targets) == 0 {
+					continue
+				}
+				if err := sendMonitorAlerts(ctx, targets, monitor, result, alert); err != nil {
+					log.Printf("send %s email for monitor %s: %v", alert, monitor.ID, err)
+				} else {
+					log.Printf("sent %s email for monitor %s", alert, monitor.ID)
+				}
 			}
 		}
 	}

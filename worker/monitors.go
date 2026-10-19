@@ -1,4 +1,4 @@
-package main
+package worker
 
 import (
 	"context"
@@ -21,7 +21,7 @@ type Monitor struct {
 	LeaseUntil      time.Time
 }
 
-func claimMonitor(ctx context.Context, db *pgxpool.Pool) (*Monitor, error) {
+func ClaimMonitor(ctx context.Context, db *pgxpool.Pool) (*Monitor, error) {
 	var monitor Monitor
 
 	// Claim and lease in one statement. Other workers skip the locked row.
@@ -54,4 +54,18 @@ func claimMonitor(ctx context.Context, db *pgxpool.Pool) (*Monitor, error) {
 	}
 
 	return &monitor, nil
+}
+
+// Find alert targets for the user for a given monitor
+func getAlertTargets(ctx context.Context, db *pgxpool.Pool, monitorID string) ([]string, error) {
+	rows, err := db.Query(ctx, `
+		SELECT DISTINCT a.target
+		FROM alert_channels a
+		JOIN monitors m ON m.user_id = a.user_id
+		WHERE m.id = $1 AND a.type = 'email'
+	`, monitorID)
+	if err != nil {
+		return nil, err
+	}
+	return pgx.CollectRows(rows, pgx.RowTo[string])
 }

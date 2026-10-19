@@ -26,12 +26,12 @@ export default defineConfig({
     },
     env: {
       NODE_ENV: "test",
+      SECRETS_KEY: "11".repeat(32),
       POSTGRES_DB: testDatabase,
       GITHUB_CLIENT_ID: "test-client",
       GITHUB_CLIENT_SECRET: "test-secret",
       GITHUB_REDIRECT_URI: "http://localhost:3000/auth/github/callback",
       FRONTEND_URL: "http://localhost:5173",
     },
-
   },
 });

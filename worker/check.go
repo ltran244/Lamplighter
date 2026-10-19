@@ -1,4 +1,4 @@
-package main
+package worker
 
 import (
 	"context"
@@ -16,7 +16,7 @@ type CheckResult struct {
 	Error      string
 }
 
-func checkMonitor(ctx context.Context, client *http.Client, monitor *Monitor) (result CheckResult) {
+func CheckMonitor(ctx context.Context, client *http.Client, monitor *Monitor) (result CheckResult) {
 	// Start the check timer
 	result.StartedAt = time.Now()
 	defer func() {

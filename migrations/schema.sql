@@ -26,10 +26,10 @@ SET default_table_access_method = heap;
 CREATE TABLE public.alert_channels (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
-    type text DEFAULT 'discord'::text NOT NULL,
-    target_url text NOT NULL,
-    CONSTRAINT alert_channels_target_url_check CHECK ((target_url ~~ 'https://discord.com/api/webhooks/%'::text)),
-    CONSTRAINT alert_channels_type_check CHECK ((type = 'discord'::text))
+    type text DEFAULT 'email'::text NOT NULL,
+    target text NOT NULL,
+    CONSTRAINT alert_channels_target_check CHECK ((length(TRIM(BOTH FROM target)) > 0)),
+    CONSTRAINT alert_channels_type_check CHECK ((type = 'email'::text))
 );
 
 

@@ -23,6 +23,7 @@ function int(name: string, fallback?: number): number {
 export const config = {
   nodeEnv: process.env.NODE_ENV ?? "production",
   port: int("PORT", 3000),
+  secretsKey: process.env.SECRETS_KEY,
   db: {
     host: required("POSTGRES_HOST"),
     port: int("POSTGRES_PORT"),
