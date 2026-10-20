@@ -11,11 +11,13 @@ Make exports the existing `POSTGRES_HOST`, `POSTGRES_PORT`, `POSTGRES_USER`,
 `POSTGRES_PASSWORD`, and `POSTGRES_DB` settings. The worker connects with pgx,
 pings PostgreSQL on startup, and closes the pool on Ctrl+C or SIGTERM.
 
-Every five seconds it claims at most one monitor that is unpaused, due
+The worker immediately claims a monitor that is unpaused, due
 (`next_run_at <= now()`), and has no active lease. One atomic SQL statement uses
 `FOR UPDATE SKIP LOCKED` and sets a 60-second lease using PostgreSQL's clock.
-No eligible monitor is a normal outcome. Claim failures are logged and retried
-on the next tick.
+After processing a result and any alert, it immediately tries to claim the next
+due monitor. It waits five seconds only when no monitor is eligible or a claim
+fails, avoiding a busy loop while idle or PostgreSQL is unavailable. Shutdown
+interrupts that wait. Checks still run one at a time.
 
 After claiming a monitor, the worker checks its URL using the configured GET
 or HEAD method and `timeout_ms`. It compares the HTTP response status with
@@ -82,6 +84,10 @@ go -C worker test -count=1 ./test -run 'TestCheckMonitor|TestNextRunAt'
 The worker code is an importable Go package so the separate test folder can
 call it. The executable entry point is `cmd/worker/main.go`; `make dev-worker`
 and `make build-worker` use that entry point.
+
+Run `make test-e2e` for the API + worker flows in the root
+[`e2e/` folder](../e2e/README.md). Run database suites separately because they
+share and clean the test database.
 
 ## Email alerts
 

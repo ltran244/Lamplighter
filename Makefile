@@ -1,7 +1,7 @@
 -include .env
 export
 
-.PHONY: help install dev dev-api dev-web dev-worker build build-worker test-api test-api-coverage test-worker db-up db-down db-shell check-test-db migrate migrate-test migrate-new migrate-down migrate-status
+.PHONY: help install dev dev-api dev-web dev-worker build build-worker test-api test-api-coverage test-worker test-e2e benchmark db-up db-down db-shell check-test-db migrate migrate-test migrate-new migrate-down migrate-status
 
 help:
 	@grep -hE '^[a-zA-Z_-]+:.*## ' $(MAKEFILE_LIST) | awk -F ':.*## ' '{printf "  make %-10s %s\n", $$1, $$2}'
@@ -27,6 +27,12 @@ build-worker: ## Build the Go worker binary
 
 test-worker: migrate-test ## Run the worker tests using the test database
 	go -C worker test -count=1 ./test
+
+test-e2e: ## Test the API and worker together
+	npm --prefix e2e test
+
+benchmark: ## Measure worker throughput, scheduling delay, and detection time
+	npm --prefix e2e run benchmark
 
 build:
 	npm --prefix api run build

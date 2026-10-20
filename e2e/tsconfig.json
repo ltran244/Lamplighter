@@ -1,0 +1,12 @@
+{
+  "extends": "../api/tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "..",
+    "noEmit": true,
+    "typeRoots": ["../api/node_modules/@types"],
+    "paths": {
+      "vitest": ["../api/node_modules/vitest/dist/index.d.ts"]
+    }
+  },
+  "include": ["*.ts"]
+}

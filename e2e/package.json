@@ -1,0 +1,10 @@
+{
+  "name": "lamplighter-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "benchmark": "npm --prefix ../api run migrate:test && go -C ../worker build -o bin/worker-e2e ./cmd/worker && ../api/node_modules/.bin/vitest run --config vitest.benchmark.config.ts",
+    "test": "npm --prefix ../api run migrate:test && go -C ../worker build -o bin/worker-e2e ./cmd/worker && ../api/node_modules/.bin/vitest run --config vitest.config.ts",
+    "typecheck": "../api/node_modules/.bin/tsc --project tsconfig.json"
+  }
+}
